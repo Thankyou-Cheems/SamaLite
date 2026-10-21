@@ -13,7 +13,7 @@ internal sealed record MetricReading(double? Value, string Source, DateTimeOffse
 
 internal sealed record HistoryPoint(DateTimeOffset Time, long Tick, double? CpuUsage, double? GpuUsage, double? CpuTemperature, double? GpuTemperature);
 
-internal sealed record Metrics(DateTimeOffset Timestamp, IReadOnlyDictionary<MetricId, MetricReading> Readings, HistoryPoint[] History, string? Attention = null, HardwareDetails? Details = null)
+internal sealed record Metrics(DateTimeOffset Timestamp, IReadOnlyDictionary<MetricId, MetricReading> Readings, HistoryPoint[] History, string? Attention = null, HardwareDetails? Details = null, FrameActivity? FrameActivity = null)
 {
     public MetricReading this[MetricId id] => Readings[id];
     [JsonIgnore] public double? CpuTemperature => this[MetricId.CpuTemperature].Failure is null ? this[MetricId.CpuTemperature].Value : null;

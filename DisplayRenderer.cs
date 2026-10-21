@@ -11,13 +11,18 @@ internal sealed class DisplayRenderer : IDisposable
     public Bitmap Canvas { get; } = new(480, 480, PixelFormat.Format32bppArgb);
     private readonly Graphics graphics;
     private readonly Font label = new("Segoe UI", 24, FontStyle.Bold, GraphicsUnit.Pixel);
-    private readonly Font focus = new("Segoe UI", 42, FontStyle.Bold, GraphicsUnit.Pixel);
+    private readonly Font focus = new("Segoe UI", 58, FontStyle.Bold, GraphicsUnit.Pixel);
     private readonly Font temperature = new("Segoe UI", 74, FontStyle.Bold, GraphicsUnit.Pixel);
     private readonly Font small = new("Microsoft YaHei UI", 20, FontStyle.Regular, GraphicsUnit.Pixel);
     private readonly Font foot = new("Segoe UI", 18, FontStyle.Regular, GraphicsUnit.Pixel);
     private readonly Font memory = new("Segoe UI", 26, FontStyle.Bold, GraphicsUnit.Pixel);
-    private readonly Font metric = new("Segoe UI", 30, FontStyle.Bold, GraphicsUnit.Pixel);
-    private readonly Font unit = new("Segoe UI", 12, FontStyle.Regular, GraphicsUnit.Pixel);
+    private readonly Font metric = new("Segoe UI", 42, FontStyle.Bold, GraphicsUnit.Pixel);
+    private readonly Font secondary = new("Segoe UI", 34, FontStyle.Bold, GraphicsUnit.Pixel);
+    private readonly Font unit = new("Segoe UI", 18, FontStyle.Regular, GraphicsUnit.Pixel);
+    private readonly Font footerUnit = new("Segoe UI", 16, FontStyle.Regular, GraphicsUnit.Pixel);
+    private readonly Font clockFont = new("Segoe UI", 28, FontStyle.Regular, GraphicsUnit.Pixel);
+    private readonly Font gameBig = new("Segoe UI", 86, FontStyle.Bold, GraphicsUnit.Pixel);
+    private readonly Font gameMedium = new("Segoe UI", 48, FontStyle.Bold, GraphicsUnit.Pixel);
     private readonly Font tiny = new("Segoe UI", 14, FontStyle.Regular, GraphicsUnit.Pixel);
     private readonly SolidBrush background = new(ColorTranslator.FromHtml("#101318"));
     private readonly SolidBrush primary = new(ColorTranslator.FromHtml("#F2F5F9"));
@@ -27,7 +32,10 @@ internal sealed class DisplayRenderer : IDisposable
     private readonly SolidBrush vram = new(Color.FromArgb(237, 159, 217));
     private readonly SolidBrush warning = new(ColorTranslator.FromHtml("#F4C17A"));
     private readonly StringFormat centered = new(StringFormat.GenericTypographic) { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip };
-    public static Rectangle[] DynamicRegions { get; } = Enumerable.Range(0, 6).Select(i => new Rectangle(24, 24 + i * 72, 432, 72)).ToArray();
+    public static Rectangle[] DynamicRegions { get; } = [new(24, 24, 432, 72), new(24, 96, 432, 72), new(24, 168, 432, 72),
+        new(0, 240, 480, 60), new(0, 300, 480, 60), new(0, 360, 480, 60), new(0, 420, 480, 60)];
+    internal static bool GameLayout(Metrics metrics, SettingsSnapshot config) => config.GameDisplay == "game" ||
+        config.GameDisplay == "auto" && config.FramesEnabled && metrics.FrameActivity?.GameLayout == true;
 
     public DisplayRenderer()
     {
@@ -44,37 +52,72 @@ internal sealed class DisplayRenderer : IDisposable
         var extra = CompactHardware.From(metrics, now);
         var stamp = (frozenAt ?? metrics.DisplaySampleTime(interval, now))?.ToString("HH:mm:ss") ?? "—";
         var normal = summary == "正常更新";
+        var game = GameLayout(metrics, config);
         var cpuUsage = metrics.Fresh(MetricId.CpuUsage, interval, now); var gpuUsage = metrics.Fresh(MetricId.GpuUsage, interval, now);
         var ram = metrics.FreshMemoryPercent(interval, now);
         Gauges(true, cpuUsage, ram, cpu.Color, Ui.Accent, config.Layout.Rings);
         Gauges(false, gpuUsage, extra.VramPercent, gpu.Color, vram.Color, config.Layout.Rings);
-        MetricGlyphs.Draw(graphics, frozenAt.HasValue ? MetricGlyph.Pause : normal ? MetricGlyph.Check : MetricGlyph.Warning, new(190, 107, 13, 15), normal ? Ui.Accent : warning.Color);
-        Text(stamp, tiny, normal ? muted : warning, new(208, 101, 89, 26));
+        MetricGlyphs.Draw(graphics, frozenAt.HasValue ? MetricGlyph.Pause : normal ? game ? MetricGlyph.Game : MetricGlyph.Check : MetricGlyph.Warning, new(146, 107, 20, 22), normal ? Ui.Accent : warning.Color);
+        Text(stamp, clockFont, normal ? muted : warning, new(169, 96, 156, 40));
         Row("CPU", 165, metrics.Fresh(MetricId.CpuTemperature, interval, now), extra.CpuPower, cpu);
         Row("GPU", 315, metrics.Fresh(MetricId.GpuTemperature, interval, now), extra.GpuPower, gpu);
         using var ramColor = new SolidBrush(Ui.Accent);
-        Text("RAM", unit, ramColor, new(63, 235, 52, 19));
-        Text("VRAM", unit, vram, new(365, 235, 52, 19));
+        Text("CPU", tiny, cpu, new(24, 237, 32, 22)); Text("RAM", tiny, ramColor, new(61, 237, 36, 22));
+        Text("VRAM", tiny, vram, new(376, 237, 46, 22)); Text("GPU", tiny, gpu, new(424, 237, 34, 22));
+        if (game) DrawGame(metrics, config, now, extra);
+        else DrawOverview(metrics, config, now, extra);
+    }
+    private void DrawOverview(Metrics metrics, SettingsSnapshot config, long now, CompactHardware extra)
+    {
         using (var separator = new Pen(Color.FromArgb(36, 182, 193, 208), 1))
         {
-            graphics.DrawLine(separator, 191, 265, 191, 388); graphics.DrawLine(separator, 289, 265, 289, 388);
+            graphics.DrawLine(separator, 166, 262, 166, 366); graphics.DrawLine(separator, 314, 262, 314, 366);
         }
         for (var i = 0; i < 12; i++)
         {
             var item = PanelMetrics.Get(config.Layout.Slots[i], metrics, config, now, extra);
-            var x = i >= 9 ? 170 + i % 3 * 70 : 140 + i % 3 * 100; var y = 274 + i / 3 * 42;
-            var center = i % 3 == 1 && i < 9;
-            Text(item.Digits, center && item.Digits.Length <= 3 ? focus : i >= 9 ? memory : metric, primary, new(x - 42, y - 28, 84, 48));
-            var suffixWidth = graphics.MeasureString(item.Suffix, unit, int.MaxValue, centered).Width;
-            var start = x - (suffixWidth + 18) / 2;
-            MetricGlyphs.Draw(graphics, item.Glyph, new(start, y + 12, 13, 13), item.Color);
-            graphics.DrawString(item.Suffix, unit, muted, new PointF(start + 18 + suffixWidth / 2, y + 18), centered);
-            if (item.Unit == "% iGPU" || item.Unit == "%") MetricGlyphs.Bar(graphics, new(x - 18, y + 28, 36, 3), item.Value, item.Color);
+            if (i < 9)
+            {
+                var x = i < 6 ? 92 + i % 3 * 148 : 132 + i % 3 * 108;
+                var y = i < 3 ? 272 : i < 6 ? 334 : 386;
+                Text(item.Digits, i == 1 ? focus : i < 6 ? metric : secondary, primary, new(x - 68, y - 33, 136, 64));
+                Caption(item, x, y + (i < 6 ? 33 : 26), unit, 20);
+            }
+            else
+            {
+                var x = 180 + i % 3 * 60;
+                var caption = item.Suffix; var glyph = item.Glyph;
+                if (config.Layout.Slots[i] is "disk-read" or "disk-write") { caption = caption[..^2]; glyph = config.Layout.Slots[i] == "disk-read" ? MetricGlyph.Download : MetricGlyph.Upload; }
+                if (config.Layout.Slots[i] == "igpu") caption = "iGPU %";
+                Caption(item with { Glyph = glyph }, x, 427, footerUnit, 16, true, caption);
+                Text(item.Digits, memory, primary, new(x - 30, 430, 60, 38));
+            }
         }
         var busy = PanelMetrics.Get("disk-busy", metrics, config, now, extra);
-        MetricGlyphs.Draw(graphics, MetricGlyph.Disk, new(188, 425, 17, 18), busy.Color);
-        Text(busy.Digits + "%", foot, primary, new(211, 420, 90, 28));
-        MetricGlyphs.Bar(graphics, new(199, 447, 82, 3), busy.Value, busy.Color);
+        MetricGlyphs.Bar(graphics, new(221, 472, 38, 4), busy.Value, busy.Color);
+    }
+    private void Caption(PanelValue item, float x, float y, Font font, float icon, bool compact = false, string? caption = null)
+    {
+        var text = caption ?? item.Suffix;
+        if (item.Glyph is MetricGlyph.Download or MetricGlyph.Upload && (text.EndsWith(" ↓", StringComparison.Ordinal) || text.EndsWith(" ↑", StringComparison.Ordinal))) text = text[..^2];
+        var width = graphics.MeasureString(text, font, int.MaxValue, centered).Width;
+        if (compact && width + icon + 4 > 60) { graphics.DrawString(text, font, muted, new PointF(x, y), centered); return; }
+        var start = x - (width + icon + 4) / 2;
+        MetricGlyphs.Draw(graphics, item.Glyph, new(start, y - icon / 2, icon, icon), item.Color);
+        graphics.DrawString(text, font, muted, new PointF(start + icon + 4 + width / 2, y), centered);
+    }
+    private void DrawGame(Metrics metrics, SettingsSnapshot config, long now, CompactHardware extra)
+    {
+        var fps = PanelMetrics.Get("fps", metrics, config, now, extra);
+        Text(fps.Digits, gameBig, primary, new(126, 230, 228, 90)); Caption(fps, 240, 315, unit, 22);
+        var ms = PanelMetrics.Get("frametime", metrics, config, now, extra); var low = PanelMetrics.Get("low", metrics, config, now, extra);
+        Text(ms.Digits, gameMedium, primary, new(65, 324, 162, 62)); Caption(ms, 146, 389, unit, 22);
+        Text(low.Digits, gameMedium, primary, new(253, 324, 162, 62)); Caption(low, 334, 389, unit, 22);
+        foreach (var (id, x) in new[] { ("fan", 186), ("pump", 294) })
+        {
+            var rpm = PanelMetrics.Get(id, metrics, config, now, extra);
+            Text(rpm.Digits, secondary, primary, new(x - 50, 403, 100, 50)); Caption(rpm, x, 452, unit, 20);
+        }
     }
     public void DrawDynamic(Metrics metrics) => Draw(metrics);
     private void Gauges(bool left, double? outer, double? inner, Color outerColor, Color innerColor, bool bands)
@@ -82,7 +125,7 @@ internal sealed class DisplayRenderer : IDisposable
         if (!bands)
         {
             using var brush = new SolidBrush(outerColor);
-            Text((left ? "CPU " : "GPU ") + Format(outer) + "%  " + (left ? "RAM " : "VRAM ") + Format(inner) + "%", unit, brush, new(left ? 100 : 240, 77, 140, 24));
+            Text((left ? "CPU " : "GPU ") + Format(outer) + "%  " + (left ? "RAM " : "VRAM ") + Format(inner) + "%", tiny, brush, new(left ? 100 : 240, 77, 140, 24));
             return;
         }
         UpperGauge.Draw(graphics, left, false, outer, outerColor); UpperGauge.Draw(graphics, left, true, inner, innerColor);
@@ -99,12 +142,10 @@ internal sealed class DisplayRenderer : IDisposable
     }
     private void Row(string name, int x, double? heat, double? power, SolidBrush color)
     {
-        MetricGlyphs.Draw(graphics, name == "CPU" ? MetricGlyph.Cpu : MetricGlyph.Gpu, new(x - 35, 128, 17, 18), color.Color);
-        Text(name, tiny, color, new(x - 12, 123, 43, 27));
-        Text(Format(heat), temperature, primary, new(x - 68, 147, 136, 91));
-        Text("°C", tiny, muted, new(x - 14, 224, 28, 21));
-        MetricGlyphs.Draw(graphics, MetricGlyph.Bolt, new(x - 36, 244, 11, 15), color.Color);
-        Text(Format(power) + "W", tiny, muted, new(x - 21, 238, 65, 24));
+        Text(Format(heat), temperature, primary, new(x - 68, 127, 136, 91));
+        Text("°C", foot, muted, new(x - 57, 213, 32, 27));
+        MetricGlyphs.Draw(graphics, MetricGlyph.Bolt, new(x - 13, 220, 13, 17), color.Color);
+        Text(Format(power) + "W", foot, muted, new(x + 2, 213, 70, 27));
     }
     private void Text(string text, Font font, Brush brush, Rectangle rectangle) => graphics.DrawString(text, font, brush, new PointF(rectangle.X + rectangle.Width / 2f, rectangle.Y + rectangle.Height / 2f), centered);
     internal static string Format(double? value, string format = "0") => value?.ToString(format) ?? "—";
@@ -160,7 +201,7 @@ internal sealed class DisplayRenderer : IDisposable
     }
     public void Dispose()
     {
-        graphics.Dispose(); Canvas.Dispose(); label.Dispose(); focus.Dispose(); temperature.Dispose(); small.Dispose(); foot.Dispose(); memory.Dispose(); metric.Dispose(); unit.Dispose(); tiny.Dispose();
+        graphics.Dispose(); Canvas.Dispose(); label.Dispose(); focus.Dispose(); temperature.Dispose(); small.Dispose(); foot.Dispose(); memory.Dispose(); metric.Dispose(); secondary.Dispose(); unit.Dispose(); footerUnit.Dispose(); clockFont.Dispose(); gameBig.Dispose(); gameMedium.Dispose(); tiny.Dispose();
         background.Dispose(); primary.Dispose(); muted.Dispose(); cpu.Dispose(); gpu.Dispose(); vram.Dispose(); warning.Dispose(); centered.Dispose();
     }
 }

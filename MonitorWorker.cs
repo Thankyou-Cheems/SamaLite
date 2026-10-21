@@ -180,7 +180,7 @@ internal sealed class MonitorWorker : IDisposable
                         {
                             if (config.Brightness is int brightness && appliedBrightness != brightness) screen.SetBrightness(brightness);
                             appliedBrightness = config.Brightness;
-                            var layoutKey = JsonSerializer.Serialize(new { config.Layout, config.CpuFanSensorId, config.PumpSensorId, config.NvmeDeviceId });
+                            var layoutKey = JsonSerializer.Serialize(new { config.Layout, config.CpuFanSensorId, config.PumpSensorId, config.NvmeDeviceId, config.GameDisplay });
                             if (appliedRotation != config.Rotation || appliedLayout != layoutKey) { fullFrame = true; pausedFrameSent = false; }
                             appliedLayout = layoutKey;
                             appliedRotation = config.Rotation; nextFrame = 0; appliedVersion = version;

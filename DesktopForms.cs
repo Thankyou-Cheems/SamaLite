@@ -8,7 +8,7 @@ internal static class Ui
 {
     public static string CompactStatus(MonitorStatus status, SettingsSnapshot config) => status.PauseMarkerFailed ? "⚠ 暂停标记未送达"
         : status.Phase != ConnectionPhase.Connected ? "● " + status.Connection
-        : config.Paused ? "Ⅱ 输出暂停" : $"● {config.RefreshSeconds}s";
+        : config.Paused ? "Ⅱ 输出暂停" : (status.Metrics is Metrics metrics && DisplayRenderer.GameLayout(metrics, config) ? "● 游戏 · " : "● ") + $"{config.RefreshSeconds}s";
     public static Size ScaleSize(Control control, int width, int height) => new((int)Math.Round(width * control.DeviceDpi / 96d), (int)Math.Round(height * control.DeviceDpi / 96d));
     public static readonly Color Background = ColorTranslator.FromHtml("#101318");
     public static readonly Color Surface = ColorTranslator.FromHtml("#171C24");

@@ -85,7 +85,7 @@ internal sealed class SensorReader : IMetricSource
         var config = settings.Capture();
         var live = activity.Read(detailsCache, config.NetworkAdapterId);
         var extended = (details?.Devices ?? []).Concat(nvme.Read(detailsCache)).Concat(live).Append(frames.Read(detailsCache, config)).ToArray();
-        return new(DateTimeOffset.Now, new Dictionary<MetricId, MetricReading>(readings), [], Details: new(DateTimeOffset.Now, Stopwatch.GetTimestamp(), extended));
+        return new(DateTimeOffset.Now, new Dictionary<MetricId, MetricReading>(readings), [], Details: new(DateTimeOffset.Now, Stopwatch.GetTimestamp(), extended), FrameActivity: frames.Activity);
     }
 
     private HardwareDetails ReadDetails()

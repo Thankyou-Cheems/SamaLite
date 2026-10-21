@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Runtime.InteropServices;
 
 namespace SamaLite;
 
@@ -55,6 +54,8 @@ internal sealed class FrameReader : IDisposable
     internal FrameReader(Func<(int, string)>? selectTarget = null) { this.selectTarget = selectTarget; }
     private readonly object gate = new();
     private readonly FrameWindow window = new();
+    private readonly GameActivityTracker gameActivity = new();
+    public FrameActivity? Activity { get; private set; }
     private readonly Dictionary<string, int> chains = new();
     private Process? collector;
     private Task? reader;
@@ -65,8 +66,8 @@ internal sealed class FrameReader : IDisposable
     internal static string Executable => Path.Combine(AppContext.BaseDirectory, "tools", "PresentMon", "PresentMon-2.6.0-x64.exe");
     public DetailDevice Read(DetailCache cache, SettingsSnapshot config)
     {
-        var selected = config.FramesEnabled ? selectTarget?.Invoke() ?? FindTarget(config.GameProcess) : (0, "帧采集已关闭");
-        if (selected.Item1 != target) { Stop(); target = selected.Item1; name = selected.Item2; retryAt = 0; }
+        var selected = !config.FramesEnabled ? new FrameTarget(0, "帧采集已关闭") : selectTarget is null ? WindowActivity.Select(config.GameProcess) : TestTarget();
+        if (selected.Pid != target) { Stop(); target = selected.Pid; name = selected.Name ?? ""; retryAt = 0; }
         if (collector is not null && collector.HasExited)
         {
             var code = collector.ExitCode; Stop(); message = "帧采集已结束，退出码 " + code;
@@ -87,6 +88,7 @@ internal sealed class FrameReader : IDisposable
             }
             stats = window.Read(Stopwatch.GetTimestamp()); chain = selectedChain; status = message;
         }
+        Activity = gameActivity.Update(selected, stats, Stopwatch.GetTimestamp(), config.RefreshSeconds);
         var source = "PresentMon 2.6.0 · PID " + target + " · " + name + " · " + chain;
         DetailMetric Metric(string id, string label, string unit, double? value, string? failure = null)
         {
@@ -157,24 +159,7 @@ internal sealed class FrameReader : IDisposable
         return [];
     }
     internal static bool TryValue(string csv, int index, out double value) => double.TryParse(Column(csv, index), NumberStyles.Float, CultureInfo.InvariantCulture, out value);
-    private static (int, string) FindTarget(string configured)
-    {
-        try
-        {
-            if (configured.Trim().Length > 0)
-            {
-                var targetName = Path.GetFileNameWithoutExtension(configured.Trim());
-                var processes = Process.GetProcessesByName(targetName);
-                try { var process = processes.OrderBy(p => p.Id).FirstOrDefault(); return process is null ? (0, targetName) : (process.Id, process.ProcessName); }
-                finally { foreach (var process in processes) process.Dispose(); }
-            }
-            GetWindowThreadProcessId(GetForegroundWindow(), out var id);
-            using var foreground = Process.GetProcessById((int)id); var name = foreground.ProcessName;
-            if (id == Environment.ProcessId || new[] { "explorer", "dwm", "Codex", "ChatGPT", "chrome", "msedge", "firefox", "pwsh", "WindowsTerminal", "Code", "ShellExperienceHost", "StartMenuExperienceHost", "SearchHost", "Taskmgr" }.Contains(name, StringComparer.OrdinalIgnoreCase)) return (0, "");
-            return ((int)id, name);
-        }
-        catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { return (0, ""); }
-    }
+    private FrameTarget TestTarget() { var p = selectTarget!(); return new(p.Item1, p.Item2, Explicit: true); }
     private void Stop()
     {
         if (collector is not null)
@@ -196,6 +181,4 @@ internal sealed class FrameReader : IDisposable
         lock (gate) { window.Clear(); chains.Clear(); selectedChain = ""; }
     }
     public void Dispose() { if (disposed) return; disposed = true; Stop(); }
-    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint id);
 }

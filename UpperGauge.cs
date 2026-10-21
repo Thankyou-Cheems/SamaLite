@@ -35,6 +35,7 @@ internal static class UpperGauge
             var bounds = new RectangleF(x - width / 2, point.Y + dy * 4 - height / 2, width, height);
             if (left ? bounds.Right > 237 : bounds.Left < 243) continue;
             if (RectangleF.Inflate(main, 2, 2).IntersectsWith(bounds) || (previous is RectangleF outer && RectangleF.Inflate(outer, 3, 3).IntersectsWith(bounds))) continue;
+            if (new RectangleF(142, 96, 184, 40).IntersectsWith(bounds)) continue;
             var maxX = Math.Max(Math.Abs(bounds.Left - 240), Math.Abs(bounds.Right - 240));
             var maxY = Math.Max(Math.Abs(bounds.Top - 240), Math.Abs(bounds.Bottom - 240));
             if (maxX * maxX + maxY * maxY > 213 * 213) continue;

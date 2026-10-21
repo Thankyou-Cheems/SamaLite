@@ -70,6 +70,7 @@ internal static class Verification
             VerifyDetails(directory, Check);
             VerifyExtended(Check);
             VerifyGauges(Check);
+            VerifyGameActivity(Check);
             RenderRasters(directory, Check);
             if (renderWindows) RenderWindows(directory, Check);
             VerifyWorker(Check);
@@ -122,6 +123,46 @@ internal static class Verification
         }
         renderer.Draw(RichFixture(), configuration: new Settings { Layout = new() { Rings = false } }.Capture());
         CheckSafety(renderer.Canvas, "bands disabled", check);
+        foreach (var (name, sample) in new[] { ("game-normal", RichFixture()), ("game-extreme", RichFixture(Fixture(100, 100), true)), ("game-missing", Fixture(null, null)) })
+        {
+            renderer.Draw(sample, configuration: new Settings { GameDisplay = "game" }.Capture());
+            renderer.Canvas.Save(Path.Combine(directory, name + ".png")); CheckSafety(renderer.Canvas, name, check);
+        }
+        renderer.Draw(RichFixture()); using var overview = new Bitmap(renderer.Canvas);
+        renderer.Draw(RichFixture(), configuration: new Settings { GameDisplay = "game" }.Capture());
+        var missed = 0;
+        for (var y = 0; y < 480; y++) for (var x = 0; x < 480; x++)
+            if (overview.GetPixel(x, y) != renderer.Canvas.GetPixel(x, y) && !DisplayRenderer.DynamicRegions.Any(r => r.Contains(x, y))) missed++;
+        check(missed == 0, "Switching overview and gaming layouts clears every changed pixel through partial updates");
+    }
+    private static void VerifyGameActivity(Action<bool, string> check)
+    {
+        var tick = Stopwatch.GetTimestamp(); var f = Stopwatch.Frequency;
+        check(WindowActivity.CoversMonitor(new(1920, 0, 2560, 1440), new(1920, 0, 2560, 1440)) &&
+            !WindowActivity.CoversMonitor(new(1920, 30, 2560, 1370), new(1920, 0, 2560, 1440)), "Fullscreen detection compares the foreground client area with its actual monitor, not desktop work area");
+        check(WindowActivity.Ignored("explorer", true) && WindowActivity.Ignored("chrome", false) && !WindowActivity.Ignored("chrome", true), "Shell windows are excluded while genuinely fullscreen browser renderers remain eligible");
+        FrameStatistics Stats(long at) => new(60, 16.67, 50, 600, 10, at);
+        var tracker = new GameActivityTracker(); var full = new FrameTarget(100, "fixture", true);
+        check(!tracker.Update(full, null, tick).GameLayout, "A fullscreen window without real frame events cannot activate gaming layout");
+        tracker.Update(full, Stats(tick), tick);
+        check(!tracker.Update(full, Stats(tick + 2 * f), tick + 2 * f).GameLayout && tracker.Update(full, Stats(tick + 3 * f), tick + 3 * f).GameLayout,
+            "Gaming layout activates only after three seconds of confirmed frame activity");
+        check(tracker.Update(new(0, ""), null, tick + 5 * f).GameLayout && !tracker.Update(new(0, ""), null, tick + 12 * f).GameLayout,
+            "Temporary focus loss is held briefly and an inactive game eventually returns to overview");
+        var windowed = new GameActivityTracker();
+        windowed.Update(new(100, "fixture"), Stats(tick), tick);
+        check(!windowed.Update(new(100, "fixture"), Stats(tick + 9 * f), tick + 9 * f).GameLayout, "Ordinary windowed rendering is not guessed to be a game");
+        var explicitGame = new GameActivityTracker(); var selected = new FrameTarget(101, "fixture", Explicit: true);
+        explicitGame.Update(selected, Stats(tick), tick);
+        check(explicitGame.Update(selected, Stats(tick + 4 * f), tick + 4 * f).GameLayout, "Explicitly selected windowed games can activate gaming layout");
+        var config = new Settings().Capture(); var active = Fixture() with { FrameActivity = new(true, 100, "fixture", true, false, "test") };
+        check(DisplayRenderer.GameLayout(active, config) && !DisplayRenderer.GameLayout(active, config with { GameDisplay = "normal" }) &&
+            DisplayRenderer.GameLayout(Fixture(), config with { GameDisplay = "game" }) && !DisplayRenderer.GameLayout(active, config with { FramesEnabled = false }),
+            "Automatic, pinned overview and pinned gaming display modes respect user settings");
+        check(!DisplayRenderer.GameLayout(Fixture(), config), "Old saved telemetry without frame activity defaults safely to overview");
+        var interrupted = new GameActivityTracker();
+        interrupted.Update(full, Stats(tick), tick);
+        check(!interrupted.Update(full, Stats(tick + 12 * f), tick + 12 * f).GameLayout, "Long sampling gaps cannot count as sustained game activity");
     }
     private static void VerifyExtended(Action<bool, string> check)
     {
@@ -166,11 +207,12 @@ internal static class Verification
             var a = UpperGauge.Label(left, false, outer); var b = UpperGauge.Label(left, true, inner, a.Bounds);
             collision |= a.Bounds.IntersectsWith(b.Bounds);
             var main = left ? new RectangleF(99, 126, 133, 118) : new RectangleF(248, 126, 133, 118);
-            coversTemperature |= a.Bounds.IntersectsWith(main) || b.Bounds.IntersectsWith(main);
+            var clock = new RectangleF(142, 96, 184, 40);
+            coversTemperature |= a.Bounds.IntersectsWith(main) || b.Bounds.IntersectsWith(main) || a.Bounds.IntersectsWith(clock) || b.Bounds.IntersectsWith(clock);
             foreach (var box in new[] { a.Bounds, b.Bounds }) foreach (var p in new[] { new PointF(box.Left, box.Top), new(box.Right, box.Top), new(box.Left, box.Bottom), new(box.Right, box.Bottom) })
                 outside |= (p.X - 240) * (p.X - 240) + (p.Y - 240) * (p.Y - 240) > 216 * 216;
         }
-        check(!collision && !coversTemperature, "All integer percentage pairs keep following labels separate from each other and large temperatures");
+        check(!collision && !coversTemperature, "All integer percentage pairs keep following labels separate from each other, clock and large temperatures");
         check(!outside, "Following percentage labels remain inside the circular safety area at every integer percentage");
     }
     private static void VerifyDetails(string directory, Action<bool, string> check)
@@ -237,9 +279,9 @@ internal static class Verification
     {
         var outside = 0; var background = Ui.Background.ToArgb(); var firstOutside = new List<string>();
         for (var y = 0; y < 480; y++) for (var x = 0; x < 480; x++)
-            if ((x - 240) * (x - 240) + (y - 240) * (y - 240) > 216 * 216 && bitmap.GetPixel(x, y).ToArgb() != background)
+            if ((x - 240) * (x - 240) + (y - 240) * (y - 240) > (y < 240 ? 216 * 216 : 238 * 238) && bitmap.GetPixel(x, y).ToArgb() != background)
             { outside++; if (firstOutside.Count < 5) firstOutside.Add($"{x},{y}"); }
-        check(outside == 0, name + " raster stays within r216 safety circle (outside=" + outside + "; " + string.Join(" ", firstOutside) + ")");
+        check(outside == 0, name + " raster stays within upper r216 / lower r238 bounds (outside=" + outside + "; " + string.Join(" ", firstOutside) + ")");
     }
     private static void RenderWindows(string directory, Action<bool, string> check)
     {

@@ -22,11 +22,12 @@ internal sealed class Settings
     public string NetworkAdapterId { get; set; } = "";
     public bool FramesEnabled { get; set; } = true;
     public string GameProcess { get; set; } = "";
+    public string GameDisplay { get; set; } = "auto";
     public SettingsSnapshot Capture()
     {
         lock (this) return new(Rotation, RefreshSeconds, Brightness, Paused, AutoReconnect, AttentionEnabled, CpuAttention, GpuAttention, MemoryAttention)
         { Layout = (Layout ?? new()).Normalized(), CpuFanSensorId = CpuFanSensorId ?? "", PumpSensorId = PumpSensorId ?? "",
-            NvmeDeviceId = NvmeDeviceId ?? "", NetworkAdapterId = NetworkAdapterId ?? "", FramesEnabled = FramesEnabled, GameProcess = GameProcess ?? "" };
+            NvmeDeviceId = NvmeDeviceId ?? "", NetworkAdapterId = NetworkAdapterId ?? "", FramesEnabled = FramesEnabled, GameProcess = GameProcess ?? "", GameDisplay = GameDisplay is "game" or "normal" ? GameDisplay : "auto" };
     }
     public static string DataDirectory { get; } = Path.Combine(AppContext.BaseDirectory, "data");
     private static string FileName => Path.Combine(DataDirectory, "settings.json");
@@ -66,4 +67,5 @@ internal sealed record SettingsSnapshot(int Rotation, int RefreshSeconds, int? B
     public string NetworkAdapterId { get; init; } = "";
     public bool FramesEnabled { get; init; } = true;
     public string GameProcess { get; init; } = "";
+    public string GameDisplay { get; init; } = "auto";
 }

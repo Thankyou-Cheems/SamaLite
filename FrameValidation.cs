@@ -13,6 +13,7 @@ internal static class FrameValidation
     {
         Directory.CreateDirectory(directory);
         var records = new List<DetailDevice>();
+        var activities = new List<FrameActivity?>();
         var presents = 0; var visible = false; var result = ""; var started = DateTimeOffset.Now;
         IntPtr swap = IntPtr.Zero, device = IntPtr.Zero, context = IntPtr.Zero;
         var window = new NativeWindow();
@@ -30,20 +31,20 @@ internal static class FrameValidation
                 {
                     var hr = present(swap, 0, 0); if (hr < 0) Marshal.ThrowExceptionForHR(hr);
                     presents++; visible |= IsWindowVisible(window.Handle);
-                    if (clock.Elapsed >= nextSample) { records.Add(reader.Read(cache, config)); nextSample += TimeSpan.FromSeconds(1); }
+                    if (clock.Elapsed >= nextSample) { records.Add(reader.Read(cache, config)); activities.Add(reader.Activity); nextSample += TimeSpan.FromSeconds(1); }
                     Thread.Sleep(16);
                 }
-                records.Add(reader.Read(cache, config));
+                records.Add(reader.Read(cache, config)); activities.Add(reader.Activity);
             }
             result = records.Any(r => r.Metrics.Any(m => m.Id == "game/low" && m.Availability == DetailAvailability.Available)) && !visible ? "Live hidden Presents captured with FPS, frame time and 1% Low" : "No complete live statistics captured";
-            if (visible || !records.Any(r => r.Metrics.Any(m => m.Id == "game/low" && m.Availability == DetailAvailability.Available))) Environment.ExitCode = 1;
+            if (visible || !activities.Any(a => a?.GameLayout == true) || !records.Any(r => r.Metrics.Any(m => m.Id == "game/low" && m.Availability == DetailAvailability.Available))) Environment.ExitCode = 1;
         }
         catch (Exception error) { result = error.ToString(); Environment.ExitCode = 1; }
         finally
         {
             if (context != IntPtr.Zero) Marshal.Release(context); if (device != IntPtr.Zero) Marshal.Release(device); if (swap != IntPtr.Zero) Marshal.Release(swap);
             window.DestroyHandle();
-            File.WriteAllText(Path.Combine(directory, "live-frames.json"), JsonSerializer.Serialize(new { Started = started, Result = result, ProcessId = Environment.ProcessId, Presents = presents, WindowWasVisible = visible, Records = records }, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(directory, "live-frames.json"), JsonSerializer.Serialize(new { Started = started, Result = result, ProcessId = Environment.ProcessId, Presents = presents, WindowWasVisible = visible, GameLayoutActivated = activities.Any(a => a?.GameLayout == true), Activities = activities, Records = records }, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
         }
     }
     [StructLayout(LayoutKind.Sequential)] private struct Mode { public uint Width, Height, RefreshNumerator, RefreshDenominator, Format, Scanline, Scaling; }

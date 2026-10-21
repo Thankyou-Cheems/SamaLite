@@ -6,7 +6,7 @@ internal sealed class LayoutForm : Form
 {
     private sealed record Option(string Id, string Name) { public override string ToString() => Name; }
     private readonly ComboBox[] slots = new ComboBox[12];
-    private readonly ComboBox preset = Box(), fan = Box(), pump = Box(), nvme = Box(), network = Box();
+    private readonly ComboBox preset = Box(), fan = Box(), pump = Box(), nvme = Box(), network = Box(), gameDisplay = Box();
     private readonly CheckBox rings = new() { Text = "上半区双环（左CPU/RAM、右GPU/VRAM，顶端100%）", AutoSize = true };
     private readonly CheckBox frames = new() { Text = "按需后台采集应用 Present 帧事件", AutoSize = true };
     private readonly TextBox process = new() { Width = 280, BackColor = Ui.Raised, ForeColor = Ui.Text };
@@ -50,10 +50,12 @@ internal sealed class LayoutForm : Form
         catch (NetworkInformationException) { }
         Sources(network, current.NetworkAdapterId, new[] { new Option("", "自动选择已连接、有网关的网卡") }.Concat(adapters)); Row("网速对应的网卡", network);
         frames.Checked = current.FramesEnabled; scroll.Controls.Add(frames); process.Text = current.GameProcess; Row("进程名（空白自动）", process);
-        scroll.Controls.Add(new Label { Text = "自动模式跟随当前活动应用，排除浏览器和常见桌面程序；可指定 game.exe。\n蓝=CPU/散热，紫=GPU，绿=内存/网络/帧，橙=磁盘。— 表示未映射、不可用或过期。\n通用 Fan # 无法证明接口用途，请按主板/BIOS确认。磁盘吞吐为所有物理磁盘合计。\n帧率是应用Present FPS；1% Low需100帧/5秒，窗口最多60秒。预览使用最近实机读数。", AutoSize = true, MaximumSize = new(660, 0), ForeColor = Ui.Muted, Margin = new(0, 14, 0, 14) });
+        gameDisplay.Items.AddRange([new Option("auto", "自动：全屏/指定程序＋真实帧事件确认"), new Option("normal", "固定硬件总览"), new Option("game", "固定游戏大字模式")]);
+        gameDisplay.SelectedIndex = current.GameDisplay == "normal" ? 1 : current.GameDisplay == "game" ? 2 : 0; Row("游戏显示模式", gameDisplay);
+        scroll.Controls.Add(new Label { Text = "帧采集跟随前台程序，排除常见桌面工具及未全屏浏览器；可指定 game.exe。\n自动游戏布局需全屏或指定进程，且持续3秒取得真实帧；失去目标8秒后恢复。\n窗口化游戏请指定进程名；这是全屏渲染检测，不是完整游戏库识别。\n蓝=CPU/散热，紫=GPU，绿=内存/网络/帧，橙=磁盘。— 表示未映射、不可用或过期。\n通用 Fan # 请按主板/BIOS确认。磁盘吞吐为所有物理盘合计。\n帧率是应用Present FPS；1% Low需100帧/5秒，窗口最多60秒。预览使用最近实机读数。", AutoSize = true, MaximumSize = new(660, 0), ForeColor = Ui.Muted, Margin = new(0, 14, 0, 14) });
         scroll.Controls.Add(preview);
         PanelLayout Layout() => new() { Preset = ((Option)preset.SelectedItem!).Id, Rings = rings.Checked, Slots = slots.Select(s => ((Option)s.SelectedItem!).Id).ToArray() };
-        SettingsSnapshot Capture() => current with { Layout = Layout(), CpuFanSensorId = ((Option)fan.SelectedItem!).Id, PumpSensorId = ((Option)pump.SelectedItem!).Id, NvmeDeviceId = ((Option)nvme.SelectedItem!).Id };
+        SettingsSnapshot Capture() => current with { Layout = Layout(), CpuFanSensorId = ((Option)fan.SelectedItem!).Id, PumpSensorId = ((Option)pump.SelectedItem!).Id, NvmeDeviceId = ((Option)nvme.SelectedItem!).Id, FramesEnabled = frames.Checked, GameDisplay = ((Option)gameDisplay.SelectedItem!).Id };
         void RefreshPreview()
         {
             if (metrics is null) return;
@@ -61,12 +63,13 @@ internal sealed class LayoutForm : Form
             var previous = preview.Image; preview.Image = new Bitmap(renderer.Canvas); previous?.Dispose();
         }
         preset.SelectedIndexChanged += (_, _) => { var chosen = PanelLayout.For(((Option)preset.SelectedItem!).Id); for (var i = 0; i < 12; i++) slots[i].SelectedIndex = Array.IndexOf(PanelLayout.Choices, chosen.Slots[i]); RefreshPreview(); };
-        foreach (var box in slots.Concat(new[] { fan, pump, nvme })) box.SelectedIndexChanged += (_, _) => RefreshPreview();
+        foreach (var box in slots.Concat(new[] { fan, pump, nvme, gameDisplay })) box.SelectedIndexChanged += (_, _) => RefreshPreview();
         rings.CheckedChanged += (_, _) => RefreshPreview();
+        frames.CheckedChanged += (_, _) => RefreshPreview();
         scroll.Controls.Add(Ui.Button("保存布局与数据源", () =>
         {
             update(s => { s.Layout = Layout(); s.CpuFanSensorId = ((Option)fan.SelectedItem!).Id; s.PumpSensorId = ((Option)pump.SelectedItem!).Id;
-                s.NvmeDeviceId = ((Option)nvme.SelectedItem!).Id; s.NetworkAdapterId = ((Option)network.SelectedItem!).Id; s.FramesEnabled = frames.Checked; s.GameProcess = process.Text.Trim(); });
+                s.NvmeDeviceId = ((Option)nvme.SelectedItem!).Id; s.NetworkAdapterId = ((Option)network.SelectedItem!).Id; s.FramesEnabled = frames.Checked; s.GameProcess = process.Text.Trim(); s.GameDisplay = ((Option)gameDisplay.SelectedItem!).Id; });
             DialogResult = DialogResult.OK; Close();
         }));
         RefreshPreview();
