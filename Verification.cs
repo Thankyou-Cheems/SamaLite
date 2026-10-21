@@ -69,6 +69,7 @@ internal static class Verification
             Check(interrupted.Update(hot, config, tick + 31 * Stopwatch.Frequency) is null, "Sampling gap interrupts sustained conditions");
             VerifyDetails(directory, Check);
             VerifyExtended(Check);
+            VerifyGauges(Check);
             RenderRasters(directory, Check);
             if (renderWindows) RenderWindows(directory, Check);
             VerifyWorker(Check);
@@ -109,6 +110,18 @@ internal static class Verification
             renderer.Draw(RichFixture(Fixture(100, 100), true), configuration: config);
             renderer.Canvas.Save(Path.Combine(directory, "layout-" + preset + ".png")); CheckSafety(renderer.Canvas, preset + " extreme preset", check);
         }
+        foreach (var percent in new[] { 0, 1, 25, 50, 75, 99, 100 })
+        {
+            var raster = RichFixture(Fixture(percent, 100, 47.7 * (100 - percent) / 100));
+            var readings = raster.Readings.ToDictionary(p => p.Key, p => p.Value);
+            readings[MetricId.GpuUsage] = readings[MetricId.GpuUsage] with { Value = percent };
+            readings[MetricId.GpuTemperature] = readings[MetricId.GpuTemperature] with { Value = 100 };
+            raster = raster with { Readings = readings, Details = raster.Details! with { Devices = raster.Details!.Devices.Select(d => d.Id != "nvidia" ? d : d with
+                { Metrics = d.Metrics.Select(m => m.Id != "nvidia/vram-used" ? m : m with { Reading = m.Reading with { Value = 16d * (100 - percent) / 100 } }).ToArray() }).ToArray() } };
+            renderer.Draw(raster); renderer.Canvas.Save(Path.Combine(directory, "gauges-" + percent + ".png")); CheckSafety(renderer.Canvas, "gauge endpoints " + percent, check);
+        }
+        renderer.Draw(RichFixture(), configuration: new Settings { Layout = new() { Rings = false } }.Capture());
+        CheckSafety(renderer.Canvas, "bands disabled", check);
     }
     private static void VerifyExtended(Action<bool, string> check)
     {
@@ -140,6 +153,25 @@ internal static class Verification
         check(SystemActivityReader.IsVirtual("Mihomo Meta Tunnel") && !SystemActivityReader.IsVirtual("Intel Ethernet Controller"), "Automatic network selection prefers physical adapters over recognized VPN interfaces");
         using var editor = new LayoutForm(new Settings(), rich.Details, rich, _ => { });
         check(!editor.Visible && editor.Controls.Count > 0, "Layout editor and real-data preview construct without showing a window");
+    }
+    private static void VerifyGauges(Action<bool, string> check)
+    {
+        check(UpperGauge.Point(205, UpperGauge.Angle(true, 100)).Y < 36 && UpperGauge.Point(205, UpperGauge.Angle(false, 100)).Y < 36,
+            "Both utilization quarters reach one hundred percent at the screen top");
+        check(UpperGauge.Point(205, UpperGauge.Angle(true, 0)).X == 35 && UpperGauge.Point(205, UpperGauge.Angle(false, 0)).X == 445,
+            "Left and right utilization quarters progress from opposite side baselines");
+        var collision = false; var outside = false; var coversTemperature = false;
+        foreach (var left in new[] { true, false }) for (var outer = 0; outer <= 100; outer++) for (var inner = 0; inner <= 100; inner++)
+        {
+            var a = UpperGauge.Label(left, false, outer); var b = UpperGauge.Label(left, true, inner, a.Bounds);
+            collision |= a.Bounds.IntersectsWith(b.Bounds);
+            var main = left ? new RectangleF(99, 126, 133, 118) : new RectangleF(248, 126, 133, 118);
+            coversTemperature |= a.Bounds.IntersectsWith(main) || b.Bounds.IntersectsWith(main);
+            foreach (var box in new[] { a.Bounds, b.Bounds }) foreach (var p in new[] { new PointF(box.Left, box.Top), new(box.Right, box.Top), new(box.Left, box.Bottom), new(box.Right, box.Bottom) })
+                outside |= (p.X - 240) * (p.X - 240) + (p.Y - 240) * (p.Y - 240) > 216 * 216;
+        }
+        check(!collision && !coversTemperature, "All integer percentage pairs keep following labels separate from each other and large temperatures");
+        check(!outside, "Following percentage labels remain inside the circular safety area at every integer percentage");
     }
     private static void VerifyDetails(string directory, Action<bool, string> check)
     {

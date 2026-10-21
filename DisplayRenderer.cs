@@ -11,13 +11,13 @@ internal sealed class DisplayRenderer : IDisposable
     public Bitmap Canvas { get; } = new(480, 480, PixelFormat.Format32bppArgb);
     private readonly Graphics graphics;
     private readonly Font label = new("Segoe UI", 24, FontStyle.Bold, GraphicsUnit.Pixel);
-    private readonly Font load = new("Segoe UI", 60, FontStyle.Bold, GraphicsUnit.Pixel);
-    private readonly Font temperature = new("Segoe UI", 38, FontStyle.Bold, GraphicsUnit.Pixel);
+    private readonly Font focus = new("Segoe UI", 42, FontStyle.Bold, GraphicsUnit.Pixel);
+    private readonly Font temperature = new("Segoe UI", 74, FontStyle.Bold, GraphicsUnit.Pixel);
     private readonly Font small = new("Microsoft YaHei UI", 20, FontStyle.Regular, GraphicsUnit.Pixel);
     private readonly Font foot = new("Segoe UI", 18, FontStyle.Regular, GraphicsUnit.Pixel);
     private readonly Font memory = new("Segoe UI", 26, FontStyle.Bold, GraphicsUnit.Pixel);
-    private readonly Font ratio = new("Segoe UI", 18, FontStyle.Regular, GraphicsUnit.Pixel);
-    private readonly Font powerValue = new("Segoe UI", 20, FontStyle.Bold, GraphicsUnit.Pixel);
+    private readonly Font metric = new("Segoe UI", 30, FontStyle.Bold, GraphicsUnit.Pixel);
+    private readonly Font unit = new("Segoe UI", 12, FontStyle.Regular, GraphicsUnit.Pixel);
     private readonly Font tiny = new("Segoe UI", 14, FontStyle.Regular, GraphicsUnit.Pixel);
     private readonly SolidBrush background = new(ColorTranslator.FromHtml("#101318"));
     private readonly SolidBrush primary = new(ColorTranslator.FromHtml("#F2F5F9"));
@@ -26,7 +26,6 @@ internal sealed class DisplayRenderer : IDisposable
     private readonly SolidBrush gpu = new(ColorTranslator.FromHtml("#C7B6FF"));
     private readonly SolidBrush warning = new(ColorTranslator.FromHtml("#F4C17A"));
     private readonly StringFormat centered = new(StringFormat.GenericTypographic) { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip };
-    private readonly StringFormat right = new(StringFormat.GenericTypographic) { Alignment = StringAlignment.Far, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip };
     public static Rectangle[] DynamicRegions { get; } = Enumerable.Range(0, 6).Select(i => new Rectangle(24, 24 + i * 72, 432, 72)).ToArray();
 
     public DisplayRenderer()
@@ -46,26 +45,30 @@ internal sealed class DisplayRenderer : IDisposable
         var normal = summary == "正常更新";
         var cpuUsage = metrics.Fresh(MetricId.CpuUsage, interval, now); var gpuUsage = metrics.Fresh(MetricId.GpuUsage, interval, now);
         var ram = metrics.FreshMemoryPercent(interval, now);
-        if (config.Layout.Rings)
+        Gauges(true, cpuUsage, ram, cpu.Color, Ui.Accent, config.Layout.Rings);
+        Gauges(false, gpuUsage, extra.VramPercent, gpu.Color, Color.FromArgb(237, 159, 217), config.Layout.Rings);
+        MetricGlyphs.Draw(graphics, frozenAt.HasValue ? MetricGlyph.Pause : normal ? MetricGlyph.Check : MetricGlyph.Warning, new(190, 107, 13, 15), normal ? Ui.Accent : warning.Color);
+        Text(stamp, tiny, normal ? muted : warning, new(208, 101, 89, 26));
+        Row("CPU", 165, metrics.Fresh(MetricId.CpuTemperature, interval, now), extra.CpuPower, cpu);
+        Row("GPU", 315, metrics.Fresh(MetricId.GpuTemperature, interval, now), extra.GpuPower, gpu);
+        using var ramColor = new SolidBrush(Ui.Accent);
+        Text("RAM", unit, ramColor, new(63, 235, 52, 19));
+        Text("VRAM", unit, gpu, new(365, 235, 52, 19));
+        using (var separator = new Pen(Color.FromArgb(36, 182, 193, 208), 1))
         {
-            Arc(184, cpuUsage, cpu.Color); Arc(274, gpuUsage, gpu.Color);
-            Arc(4, extra.VramPercent, gpu.Color); Arc(94, ram, Ui.Accent);
+            graphics.DrawLine(separator, 191, 265, 191, 388); graphics.DrawLine(separator, 289, 265, 289, 388);
         }
-        MetricGlyphs.Draw(graphics, frozenAt.HasValue ? MetricGlyph.Pause : normal ? MetricGlyph.Check : MetricGlyph.Warning, new(174, 39, 16, 18), normal ? Ui.Accent : warning.Color);
-        Text(stamp, foot, normal ? muted : warning, new(192, 32, 108, 30));
-        Row("CPU", 156, cpuUsage, metrics.Fresh(MetricId.CpuTemperature, interval, now), extra.CpuPower, cpu);
-        Row("GPU", 324, gpuUsage, metrics.Fresh(MetricId.GpuTemperature, interval, now), extra.GpuPower, gpu);
-        DrawTrend(graphics, new(94, 195, 126, 10), metrics.History, p => p.CpuUsage, cpu.Color, now, interval);
-        DrawTrend(graphics, new(260, 195, 126, 10), metrics.History, p => p.GpuUsage, gpu.Color, now, interval);
-        MemoryRow("RAM", 156, ram, metrics.Fresh(MetricId.MemoryUsed, interval, now), metrics.Fresh(MetricId.MemoryTotal, interval, now), Ui.Accent);
-        MemoryRow("VRAM", 324, extra.VramPercent, extra.VramUsed, extra.VramTotal, gpu.Color);
         for (var i = 0; i < 12; i++)
         {
             var item = PanelMetrics.Get(config.Layout.Slots[i], metrics, config, now, extra);
-            var x = i >= 9 ? 160 + i % 3 * 80 : 142 + i % 3 * 98; var y = 268 + i / 3 * 40;
-            MetricGlyphs.Draw(graphics, item.Glyph, new(x - 43, y - 12, 19, 20), item.Color);
-            Text(item.Digits, memory, primary, new(x - 24, y - 20, 70, 36));
-            Text(item.Suffix, tiny, muted, new(x - 29, y + 9, 78, 21));
+            var x = i >= 9 ? 170 + i % 3 * 70 : 140 + i % 3 * 100; var y = 274 + i / 3 * 42;
+            var center = i % 3 == 1 && i < 9;
+            Text(item.Digits, center && item.Digits.Length <= 3 ? focus : i >= 9 ? memory : metric, primary, new(x - 42, y - 28, 84, 48));
+            var suffixWidth = graphics.MeasureString(item.Suffix, unit, int.MaxValue, centered).Width;
+            var start = x - (suffixWidth + 18) / 2;
+            MetricGlyphs.Draw(graphics, item.Glyph, new(start, y + 12, 13, 13), item.Color);
+            graphics.DrawString(item.Suffix, unit, muted, new PointF(start + 18 + suffixWidth / 2, y + 18), centered);
+            if (item.Unit == "% iGPU" || item.Unit == "%") MetricGlyphs.Bar(graphics, new(x - 18, y + 28, 36, 3), item.Value, item.Color);
         }
         var busy = PanelMetrics.Get("disk-busy", metrics, config, now, extra);
         MetricGlyphs.Draw(graphics, MetricGlyph.Disk, new(188, 425, 17, 18), busy.Color);
@@ -73,33 +76,36 @@ internal sealed class DisplayRenderer : IDisposable
         MetricGlyphs.Bar(graphics, new(199, 447, 82, 3), busy.Value, busy.Color);
     }
     public void DrawDynamic(Metrics metrics) => Draw(metrics);
-    private void Arc(float start, double? value, Color color)
+    private void Gauges(bool left, double? outer, double? inner, Color outerColor, Color innerColor, bool bands)
     {
-        using var track = new Pen(Color.FromArgb(38, color), 5); using var fill = new Pen(color, 5);
-        graphics.DrawArc(track, 29, 29, 422, 422, start, 82);
-        if (value > 0) graphics.DrawArc(fill, 29, 29, 422, 422, start, (float)Math.Clamp(value.Value / 100, 0, 1) * 82);
+        if (!bands)
+        {
+            using var brush = new SolidBrush(outerColor);
+            Text((left ? "CPU " : "GPU ") + Format(outer) + "%  " + (left ? "RAM " : "VRAM ") + Format(inner) + "%", unit, brush, new(left ? 100 : 240, 77, 140, 24));
+            return;
+        }
+        UpperGauge.Draw(graphics, left, false, outer, outerColor); UpperGauge.Draw(graphics, left, true, inner, innerColor);
+        var first = UpperGauge.Label(left, false, outer); var second = UpperGauge.Label(left, true, inner, first.Bounds);
+        GaugeNumber(first, outer, outerColor); GaugeNumber(second, inner, innerColor);
     }
-    private void Row(string name, int x, double? usage, double? heat, double? power, SolidBrush color)
+    private void GaugeNumber(GaugeLabel placement, double? value, Color color)
     {
-        MetricGlyphs.Draw(graphics, name == "CPU" ? MetricGlyph.Cpu : MetricGlyph.Gpu, new(x - 43, 72, 19, 19), color.Color);
-        Text(name, foot, color, new(x - 20, 67, 60, 28));
-        Number(usage, load, new(x - 64, 88, 112, 72));
-        Text("%", foot, muted, new(x + 49, 122, 24, 27));
-        Number(heat, temperature, new(x - 60, 152, 81, 46));
-        Text("°C", foot, muted, new(x + 22, 166, 32, 27));
-        MetricGlyphs.Draw(graphics, MetricGlyph.Bolt, new(x - 42, 208, 10, 14), color.Color);
-        Text(Format(power) + "W", tiny, muted, new(x - 29, 201, 77, 27));
+        var b = placement.Bounds;
+        using var leader = new Pen(color, 1); using var brush = new SolidBrush(color);
+        graphics.DrawLine(leader, placement.Anchor, new(b.X + b.Width / 2, b.Y + b.Height / 2));
+        graphics.FillRectangle(background, b); graphics.DrawRectangle(leader, b.X, b.Y, b.Width, b.Height);
+        graphics.DrawString(Format(value) + "%", tiny, brush, b, centered);
     }
-    private void MemoryRow(string name, int x, double? percent, double? used, double? total, Color color)
+    private void Row(string name, int x, double? heat, double? power, SolidBrush color)
     {
-        using var brush = new SolidBrush(color);
-        Text(name, tiny, brush, new(x - 63, 225, 50, 25));
-        Text(Format(percent) + "%", memory, primary, new(x - 10, 220, 80, 34));
-        MetricGlyphs.Bar(graphics, new(x - 61, 252, 123, 3), percent, color);
-        // Exact used/total values remain available on the desktop hardware page.
+        MetricGlyphs.Draw(graphics, name == "CPU" ? MetricGlyph.Cpu : MetricGlyph.Gpu, new(x - 35, 128, 17, 18), color.Color);
+        Text(name, tiny, color, new(x - 12, 123, 43, 27));
+        Text(Format(heat), temperature, primary, new(x - 68, 147, 136, 91));
+        Text("°C", tiny, muted, new(x - 14, 224, 28, 21));
+        MetricGlyphs.Draw(graphics, MetricGlyph.Bolt, new(x - 36, 244, 11, 15), color.Color);
+        Text(Format(power) + "W", tiny, muted, new(x - 21, 238, 65, 24));
     }
-    private void Number(double? number, Font font, Rectangle rectangle) => graphics.DrawString(Format(number), font, primary, rectangle, right);
-    private void Text(string text, Font font, Brush brush, Rectangle rectangle) => graphics.DrawString(text, font, brush, rectangle, centered);
+    private void Text(string text, Font font, Brush brush, Rectangle rectangle) => graphics.DrawString(text, font, brush, new PointF(rectangle.X + rectangle.Width / 2f, rectangle.Y + rectangle.Height / 2f), centered);
     internal static string Format(double? value, string format = "0") => value?.ToString(format) ?? "—";
     internal static void DrawTrend(Graphics g, RectangleF bounds, HistoryPoint[] history, Func<HistoryPoint, double?> select,
         Color color, long now, int interval, double maximum = 100)
@@ -153,7 +159,7 @@ internal sealed class DisplayRenderer : IDisposable
     }
     public void Dispose()
     {
-        graphics.Dispose(); Canvas.Dispose(); label.Dispose(); load.Dispose(); temperature.Dispose(); small.Dispose(); foot.Dispose(); memory.Dispose(); ratio.Dispose(); powerValue.Dispose(); tiny.Dispose();
-        background.Dispose(); primary.Dispose(); muted.Dispose(); cpu.Dispose(); gpu.Dispose(); warning.Dispose(); centered.Dispose(); right.Dispose();
+        graphics.Dispose(); Canvas.Dispose(); label.Dispose(); focus.Dispose(); temperature.Dispose(); small.Dispose(); foot.Dispose(); memory.Dispose(); metric.Dispose(); unit.Dispose(); tiny.Dispose();
+        background.Dispose(); primary.Dispose(); muted.Dispose(); cpu.Dispose(); gpu.Dispose(); warning.Dispose(); centered.Dispose();
     }
 }

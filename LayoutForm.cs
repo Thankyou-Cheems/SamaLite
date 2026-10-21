@@ -7,7 +7,7 @@ internal sealed class LayoutForm : Form
     private sealed record Option(string Id, string Name) { public override string ToString() => Name; }
     private readonly ComboBox[] slots = new ComboBox[12];
     private readonly ComboBox preset = Box(), fan = Box(), pump = Box(), nvme = Box(), network = Box();
-    private readonly CheckBox rings = new() { Text = "边缘占比条（左上CPU、右上GPU、右下VRAM、左下RAM）", AutoSize = true };
+    private readonly CheckBox rings = new() { Text = "上半区双环（左CPU/RAM、右GPU/VRAM，顶端100%）", AutoSize = true };
     private readonly CheckBox frames = new() { Text = "按需后台采集应用 Present 帧事件", AutoSize = true };
     private readonly TextBox process = new() { Width = 280, BackColor = Ui.Raised, ForeColor = Ui.Text };
     private readonly PictureBox preview = new() { Size = new(300, 300), SizeMode = PictureBoxSizeMode.Zoom };
