@@ -72,6 +72,7 @@ internal static class Verification
             VerifyGauges(Check);
             VerifyGameActivity(Check);
             RenderRasters(directory, Check);
+            RenderIcons(directory, Check);
             if (renderWindows) RenderWindows(directory, Check);
             VerifyWorker(Check);
             File.WriteAllText(resultPath, JsonSerializer.Serialize(new { Success = true, Checks = results }, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
@@ -308,6 +309,11 @@ internal static class Verification
         form.Close();
         using var quick = new QuickForm(config, action => action(config), () => { }, () => { });
         quick.UpdateStatus(status); quick.OpenNear(Screen.PrimaryScreen!.WorkingArea.Location + new Size(700, 700)); Application.DoEvents(); Capture(quick, Path.Combine(directory, "quick.png")); quick.Close();
+    }
+    private static void RenderIcons(string directory, Action<bool, string> check)
+    {
+        using var application = IconAssets.Draw(256, TrayMark.Normal, false, true);
+        application.Save(Path.Combine(directory, "application-icon.png"));
         using var icons = new Bitmap(480, 210); using var g = Graphics.FromImage(icons); g.Clear(Ui.Background);
         var row = 0;
         foreach (var mark in Enum.GetValues<TrayMark>())

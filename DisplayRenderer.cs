@@ -20,6 +20,7 @@ internal sealed class DisplayRenderer : IDisposable
     private readonly Font secondary = new("Segoe UI", 34, FontStyle.Bold, GraphicsUnit.Pixel);
     private readonly Font unit = new("Segoe UI", 18, FontStyle.Regular, GraphicsUnit.Pixel);
     private readonly Font footerUnit = new("Segoe UI", 16, FontStyle.Regular, GraphicsUnit.Pixel);
+    private readonly Font diskUnit = new("Segoe UI", 14, FontStyle.Regular, GraphicsUnit.Pixel);
     private readonly Font clockFont = new("Segoe UI", 28, FontStyle.Regular, GraphicsUnit.Pixel);
     private readonly Font gameBig = new("Segoe UI", 86, FontStyle.Bold, GraphicsUnit.Pixel);
     private readonly Font gameMedium = new("Segoe UI", 48, FontStyle.Bold, GraphicsUnit.Pixel);
@@ -86,11 +87,15 @@ internal sealed class DisplayRenderer : IDisposable
             else
             {
                 var x = 180 + i % 3 * 60;
-                var caption = item.Suffix; var glyph = item.Glyph;
-                if (config.Layout.Slots[i] is "disk-read" or "disk-write") { caption = caption[..^2]; glyph = config.Layout.Slots[i] == "disk-read" ? MetricGlyph.Download : MetricGlyph.Upload; }
+                var caption = item.Suffix;
+                var disk = config.Layout.Slots[i] is "disk-read" or "disk-write";
+                if (disk) caption = caption[..^2];
+                var value = item.Digits;
+                if (disk && caption.StartsWith("k ", StringComparison.Ordinal)) { caption = caption[2..]; value += "k"; }
                 if (config.Layout.Slots[i] == "igpu") caption = "iGPU %";
-                Caption(item with { Glyph = glyph }, x, 427, footerUnit, 16, true, caption);
-                Text(item.Digits, memory, primary, new(x - 30, 430, 60, 38));
+                Caption(item, x, 427, disk ? diskUnit : footerUnit, 16, !disk, caption);
+                using var digits = new SolidBrush(disk ? item.Color : primary.Color);
+                Text(value, memory, digits, new(x - 30, 430, 60, 38));
             }
         }
         var busy = PanelMetrics.Get("disk-busy", metrics, config, now, extra);
@@ -104,7 +109,8 @@ internal sealed class DisplayRenderer : IDisposable
         if (compact && width + icon + 4 > 60) { graphics.DrawString(text, font, muted, new PointF(x, y), centered); return; }
         var start = x - (width + icon + 4) / 2;
         MetricGlyphs.Draw(graphics, item.Glyph, new(start, y - icon / 2, icon, icon), item.Color);
-        graphics.DrawString(text, font, muted, new PointF(start + icon + 4 + width / 2, y), centered);
+        using var captionBrush = new SolidBrush(item.Glyph is MetricGlyph.DiskRead or MetricGlyph.DiskWrite ? item.Color : muted.Color);
+        graphics.DrawString(text, font, captionBrush, new PointF(start + icon + 4 + width / 2, y), centered);
     }
     private void DrawGame(Metrics metrics, SettingsSnapshot config, long now, CompactHardware extra)
     {
@@ -201,7 +207,7 @@ internal sealed class DisplayRenderer : IDisposable
     }
     public void Dispose()
     {
-        graphics.Dispose(); Canvas.Dispose(); label.Dispose(); focus.Dispose(); temperature.Dispose(); small.Dispose(); foot.Dispose(); memory.Dispose(); metric.Dispose(); secondary.Dispose(); unit.Dispose(); footerUnit.Dispose(); clockFont.Dispose(); gameBig.Dispose(); gameMedium.Dispose(); tiny.Dispose();
+        graphics.Dispose(); Canvas.Dispose(); label.Dispose(); focus.Dispose(); temperature.Dispose(); small.Dispose(); foot.Dispose(); memory.Dispose(); metric.Dispose(); secondary.Dispose(); unit.Dispose(); footerUnit.Dispose(); diskUnit.Dispose(); clockFont.Dispose(); gameBig.Dispose(); gameMedium.Dispose(); tiny.Dispose();
         background.Dispose(); primary.Dispose(); muted.Dispose(); cpu.Dispose(); gpu.Dispose(); vram.Dispose(); warning.Dispose(); centered.Dispose();
     }
 }

@@ -18,6 +18,7 @@ $imageOutput = Join-Path $OutputDirectory 'docs/images'
 New-Item -ItemType Directory -Path $imageOutput -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'docs/images/circular-layout-sample.png') -Destination $imageOutput
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'docs/images/game-layout-sample.png') -Destination $imageOutput
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'docs/images/application-icon.png') -Destination $imageOutput
 Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'licenses') -Force | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $licenses -Recurse -Force }
 $presentMonCache = & (Join-Path $PSScriptRoot 'Fetch-PresentMon.ps1')
 $presentMonOutput = Join-Path $OutputDirectory 'tools/PresentMon'

@@ -36,20 +36,45 @@ internal static class IconAssets
     {
         var bitmap = new Bitmap(size, size, PixelFormat.Format32bppArgb);
         using var g = Graphics.FromImage(bitmap);
-        g.Clear(application ? Ui.Background : Color.Transparent);
-        g.SmoothingMode = size <= 24 ? SmoothingMode.None : SmoothingMode.AntiAlias;
-        var color = application ? Ui.Accent : SystemInformation.HighContrast ? SystemColors.WindowText : light ? Color.FromArgb(30, 40, 48) : Color.FromArgb(242, 245, 249);
-        using var pen = new Pen(color, Math.Max(1, MathF.Round(size / 16f))) { StartCap = LineCap.Square, EndCap = LineCap.Square };
-        using var brush = new SolidBrush(color);
-        // Pixel-snapped open display frame and L; the status occupies its open corner.
-        var left = MathF.Round(size * .125f); var top = MathF.Round(size * .125f);
-        var right = MathF.Round(size * .8125f); var bottom = MathF.Round(size * .8125f);
-        g.DrawLines(pen, new PointF[] { new(right, size * .43f), new(right, top), new(left, top), new(left, bottom), new(size * .45f, bottom) });
-        g.DrawLines(pen, new PointF[] { new(size * .34f, size * .32f), new(size * .34f, size * .62f), new(size * .58f, size * .62f) });
-        var x = size * .7f; var y = size * .76f; var radius = Math.Max(1, size / 16f);
+        g.Clear(Color.Transparent);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.ScaleTransform(size / 64f, size / 64f);
+        var contrast = !application && SystemInformation.HighContrast;
+        var foreground = contrast ? SystemColors.WindowText : Color.FromArgb(242, 245, 249);
+        var face = contrast ? SystemColors.Window : Ui.Background;
+        using var housing = new SolidBrush(contrast ? SystemColors.Window : Color.FromArgb(38, 47, 60));
+        using var screen = new SolidBrush(face);
+        using var rim = new Pen(contrast ? foreground : light ? Color.FromArgb(70, 87, 108) : Color.FromArgb(133, 151, 176), 2);
+        g.FillEllipse(housing, 2, 2, 60, 60); g.DrawEllipse(rim, 3, 3, 58, 58);
+        g.FillEllipse(screen, 7, 7, 50, 50);
+        using var blue = new Pen(contrast ? foreground : Ui.Cpu, 4) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        using var purple = new Pen(contrast ? foreground : Ui.Gpu, 4) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        g.DrawArc(blue, 11, 11, 42, 42, 181, 80); g.DrawArc(purple, 11, 11, 42, 42, 279, 80);
+        using var pen = new Pen(foreground, 3) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        using var brush = new SolidBrush(foreground);
+        if (size <= 24)
+        {
+            // A thermometer survives tray scaling better than miniature text.
+            g.DrawLine(pen, 31, 24, 31, 39); g.DrawEllipse(pen, 26, 37, 10, 10);
+            g.DrawLine(pen, 38, 25, 41, 25); g.DrawLine(pen, 38, 31, 41, 31);
+        }
+        else
+        {
+            using var font = new Font("Segoe UI", 22, FontStyle.Bold, GraphicsUnit.Pixel);
+            using var format = new StringFormat(StringFormat.GenericTypographic) { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+            g.DrawString("72", font, brush, new PointF(30, 33), format);
+            using var degree = new Pen(foreground, 1.5f); g.DrawEllipse(degree, 43, 23, 4, 4);
+            using var led = new SolidBrush(contrast ? foreground : Ui.Accent); g.FillEllipse(led, 29, 49, 6, 3);
+        }
+        if (application && mark == TrayMark.Normal) return bitmap;
+        using var badge = new SolidBrush(contrast ? SystemColors.Window : Color.FromArgb(22, 28, 36));
+        g.FillEllipse(badge, 41, 41, 22, 22);
+        var x = 52f; var y = 52f; var radius = 2f;
         switch (mark)
         {
-            case TrayMark.Normal: g.FillEllipse(brush, x - radius, y - radius, radius * 2, radius * 2); break;
+            case TrayMark.Normal:
+                using (var normal = new SolidBrush(contrast ? foreground : Ui.Accent)) g.FillEllipse(normal, x - radius * 1.5f, y - radius * 1.5f, radius * 3, radius * 3); break;
             case TrayMark.Paused:
                 g.DrawLine(pen, x - radius * 1.8f, y - radius * 2, x - radius * 1.8f, y + radius * 2);
                 g.DrawLine(pen, x + radius * 1.8f, y - radius * 2, x + radius * 1.8f, y + radius * 2); break;

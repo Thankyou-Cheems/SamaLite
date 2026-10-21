@@ -36,9 +36,13 @@ internal static class MetricGlyphs
                 graphics.DrawRectangle(pen, 7, 2, 10, 20); graphics.DrawRectangle(pen, 9, 5, 6, 6); graphics.DrawLine(pen, 10, 18, 14, 18); break;
             case MetricGlyph.DiskRead:
             case MetricGlyph.DiskWrite:
+                graphics.DrawRectangle(pen, 2, 3, 13, 18); graphics.DrawEllipse(pen, 5, 6, 7, 7); graphics.DrawLine(pen, 8, 10, 12, 15);
+                var read = glyph == MetricGlyph.DiskRead;
+                graphics.DrawLine(pen, 20, 5, 20, 20);
+                graphics.DrawLines(pen, read ? new PointF[] { new(17, 16), new(20, 20), new(23, 16) } : new PointF[] { new(17, 9), new(20, 5), new(23, 9) }); break;
             case MetricGlyph.Disk:
                 graphics.DrawRectangle(pen, 3, 3, 18, 18); graphics.DrawEllipse(pen, 6, 6, 8, 8); graphics.DrawLine(pen, 10, 10, 17, 17);
-                if (glyph != MetricGlyph.Disk) { var y = glyph == MetricGlyph.DiskRead ? 20 : 15; graphics.DrawLine(pen, 16, 15, 16, 20); graphics.DrawLine(pen, 16, y, 19, y); } break;
+                break;
             case MetricGlyph.Cpu:
                 graphics.DrawRectangle(pen, 5, 5, 14, 14); graphics.DrawRectangle(pen, 9, 9, 6, 6);
                 for (var i = 8; i <= 16; i += 4) { graphics.DrawLine(pen, i, 2, i, 5); graphics.DrawLine(pen, i, 19, i, 22); graphics.DrawLine(pen, 2, i, 5, i); graphics.DrawLine(pen, 19, i, 22, i); }
