@@ -24,6 +24,7 @@ internal sealed class DisplayRenderer : IDisposable
     private readonly SolidBrush muted = new(ColorTranslator.FromHtml("#B6C1D0"));
     private readonly SolidBrush cpu = new(ColorTranslator.FromHtml("#96BAFF"));
     private readonly SolidBrush gpu = new(ColorTranslator.FromHtml("#C7B6FF"));
+    private readonly SolidBrush vram = new(Color.FromArgb(237, 159, 217));
     private readonly SolidBrush warning = new(ColorTranslator.FromHtml("#F4C17A"));
     private readonly StringFormat centered = new(StringFormat.GenericTypographic) { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center, FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip };
     public static Rectangle[] DynamicRegions { get; } = Enumerable.Range(0, 6).Select(i => new Rectangle(24, 24 + i * 72, 432, 72)).ToArray();
@@ -46,14 +47,14 @@ internal sealed class DisplayRenderer : IDisposable
         var cpuUsage = metrics.Fresh(MetricId.CpuUsage, interval, now); var gpuUsage = metrics.Fresh(MetricId.GpuUsage, interval, now);
         var ram = metrics.FreshMemoryPercent(interval, now);
         Gauges(true, cpuUsage, ram, cpu.Color, Ui.Accent, config.Layout.Rings);
-        Gauges(false, gpuUsage, extra.VramPercent, gpu.Color, Color.FromArgb(237, 159, 217), config.Layout.Rings);
+        Gauges(false, gpuUsage, extra.VramPercent, gpu.Color, vram.Color, config.Layout.Rings);
         MetricGlyphs.Draw(graphics, frozenAt.HasValue ? MetricGlyph.Pause : normal ? MetricGlyph.Check : MetricGlyph.Warning, new(190, 107, 13, 15), normal ? Ui.Accent : warning.Color);
         Text(stamp, tiny, normal ? muted : warning, new(208, 101, 89, 26));
         Row("CPU", 165, metrics.Fresh(MetricId.CpuTemperature, interval, now), extra.CpuPower, cpu);
         Row("GPU", 315, metrics.Fresh(MetricId.GpuTemperature, interval, now), extra.GpuPower, gpu);
         using var ramColor = new SolidBrush(Ui.Accent);
         Text("RAM", unit, ramColor, new(63, 235, 52, 19));
-        Text("VRAM", unit, gpu, new(365, 235, 52, 19));
+        Text("VRAM", unit, vram, new(365, 235, 52, 19));
         using (var separator = new Pen(Color.FromArgb(36, 182, 193, 208), 1))
         {
             graphics.DrawLine(separator, 191, 265, 191, 388); graphics.DrawLine(separator, 289, 265, 289, 388);
@@ -160,6 +161,6 @@ internal sealed class DisplayRenderer : IDisposable
     public void Dispose()
     {
         graphics.Dispose(); Canvas.Dispose(); label.Dispose(); focus.Dispose(); temperature.Dispose(); small.Dispose(); foot.Dispose(); memory.Dispose(); metric.Dispose(); unit.Dispose(); tiny.Dispose();
-        background.Dispose(); primary.Dispose(); muted.Dispose(); cpu.Dispose(); gpu.Dispose(); warning.Dispose(); centered.Dispose();
+        background.Dispose(); primary.Dispose(); muted.Dispose(); cpu.Dispose(); gpu.Dispose(); vram.Dispose(); warning.Dispose(); centered.Dispose();
     }
 }
