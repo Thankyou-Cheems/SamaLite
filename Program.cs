@@ -9,15 +9,29 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if (args.Contains("--exit"))
+        {
+            try { using var signal = EventWaitHandle.OpenExisting(QuitEventName); signal.Set(); }
+            catch (Exception error) when (error is WaitHandleCannotBeOpenedException or UnauthorizedAccessException) { Environment.ExitCode = 1; }
+            return;
+        }
         ApplicationConfiguration.Initialize();
+        if (Argument(args, "--verify-frames") is string frameDirectory) { FrameValidation.Run(frameDirectory); return; }
+        if (Argument(args, "--verify") is string verificationDirectory)
+        {
+            Verification.Run(verificationDirectory); return;
+        }
+        if (Argument(args, "--verify-render") is string renderDirectory)
+        {
+            Verification.Run(renderDirectory, true); return;
+        }
         if (Argument(args, "--render-ui") is string uiOutput)
         {
             var data = JsonSerializer.Deserialize<MonitorStatus>(File.ReadAllText(Path.Combine(Settings.DataDirectory, "status.json")));
             if (data?.Metrics is not Metrics metrics) throw new IOException("No recorded metrics to render.");
-            using var renderer = new DisplayRenderer();
-            renderer.Draw(metrics);
             using var form = new StatusForm();
-            form.UpdateStatus(data, new Bitmap(renderer.Canvas));
+            // A reconstructed drawing is not evidence of a completed send.
+            form.UpdateStatus(data, null);
             form.Show(); Application.DoEvents();
             using var bitmap = new Bitmap(form.Width, form.Height);
             form.DrawToBitmap(bitmap, new Rectangle(0, 0, bitmap.Width, bitmap.Height));
@@ -32,16 +46,23 @@ internal static class Program
         }
         if (!args.Any(argument => argument is "--sensors" or "--test-image" or "--live-test" or "--handshake" or "--port"))
         {
-            var settings = Settings.Load();
+            var startup = args.Contains("--startup");
+            Settings settings;
+            try { settings = Settings.Load(); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                if (!startup) MessageBox.Show("程序目录必须可写：" + error.Message, "SamaLite");
+                Environment.ExitCode = 1; return;
+            }
             var user = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
             using var mutex = new Mutex(true, @"Local\SamaLite-Screen-" + user, out var first);
-            if (!first) { MessageBox.Show("SamaLite 已在运行，请双击托盘图标查看状态。", "SamaLite"); return; }
+            if (!first) { if (!startup) MessageBox.Show("SamaLite 已在运行，请单击托盘图标查看状态。", "SamaLite"); return; }
             try
             {
                 Application.Run(new TrayContext(settings, int.TryParse(Argument(args, "--duration"), out var seconds) ? seconds : null,
                     Argument(args, "--smoke-output"), args.Contains("--show")));
             }
-            catch (Exception error) { LimitedLog.Write(error.ToString()); MessageBox.Show(error.Message, "SamaLite 启动失败"); }
+            catch (Exception error) { LimitedLog.Write(error.ToString()); if (!startup) MessageBox.Show(error.Message, "SamaLite 启动失败"); Environment.ExitCode = 1; }
             finally { mutex.ReleaseMutex(); }
             return;
         }
@@ -52,7 +73,8 @@ internal static class Program
             {
                 using var sensors = new SensorReader();
                 var samples = new List<Metrics>();
-                for (var index = 0; index < 4; index++) { samples.Add(sensors.Read()); Thread.Sleep(1000); }
+                var sampleCount = int.TryParse(Argument(args, "--sensor-samples"), out var requestedSamples) ? Math.Clamp(requestedSamples, 4, 60) : 4;
+                for (var index = 0; index < sampleCount; index++) { samples.Add(sensors.Read()); Thread.Sleep(1000); }
                 File.WriteAllText(output, JsonSerializer.Serialize(samples, new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
                 File.WriteAllText(output + ".hardware.txt", sensors.HardwareReport(), new UTF8Encoding(false));
                 return;
@@ -102,6 +124,9 @@ internal static class Program
             Environment.ExitCode = 1;
         }
     }
+
+    internal static string QuitEventName => @"Local\SamaLite-Quit-" +
+        (System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName);
 
     internal static string? Argument(string[] args, string key)
     {

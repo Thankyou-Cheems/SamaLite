@@ -3,18 +3,24 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon Condition="Exists('Assets/SamaLite.ico')">Assets/SamaLite.ico</ApplicationIcon>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.1.0</Version>
+    <Version>0.6.0</Version>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
     <Company>SamaLite</Company>
     <Description>Small tray monitor for the local SAMA 480x480 serial screen.</Description>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <NuGetAuditMode>all</NuGetAuditMode>
-    <DefaultItemExcludes>$(DefaultItemExcludes);.local/**;work/**;outputs/**;app/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);.local/**;work/**;outputs/**;app/**;artifacts/**</DefaultItemExcludes>
   </PropertyGroup>
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.IO.Ports" Version="10.0.3" />
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
