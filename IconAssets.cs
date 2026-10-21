@@ -60,11 +60,7 @@ internal static class IconAssets
         }
         else
         {
-            using var font = new Font("Segoe UI", 22, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var format = new StringFormat(StringFormat.GenericTypographic) { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-            g.DrawString("72", font, brush, new PointF(30, 33), format);
-            using var degree = new Pen(foreground, 1.5f); g.DrawEllipse(degree, 43, 23, 4, 4);
+            MetricGlyphs.Draw(g, MetricGlyph.Thermometer, new(21, 19, 23, 30), foreground);
             using var led = new SolidBrush(contrast ? foreground : Ui.Accent); g.FillEllipse(led, 29, 49, 6, 3);
         }
         if (application && mark == TrayMark.Normal) return bitmap;
